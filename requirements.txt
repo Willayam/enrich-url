@@ -1,6 +1,3 @@
 flask
-request
-jsonify
-urllib
+requests
 whois
-datetime
