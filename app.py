@@ -68,7 +68,7 @@ def webhook_handler():
     data = request.json
     if data and 'url' in data:
         # If 'url' key is present, process it
-        result = process_the_url(data['url'])  # Replace with your processing function
+        result = fetch_domain_info(data['url'])  # Corrected function call
         return jsonify(result), 200
     else:
         # If 'url' key is not present, return an error response
