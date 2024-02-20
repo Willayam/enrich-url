@@ -31,13 +31,17 @@ def fetch_domain_info(url):
         return {'URL': url, 'Error': str(e)}
 
 @app.route('/webhook', methods=['POST'])
-def webhook():
-    data = request.json  # Assuming the incoming request has JSON body
+def webhook_handler():
+    # Parse the JSON from the request body
+    data = request.json
     if data and 'url' in data:
-        result = fetch_domain_info(data['url'])
-        return jsonify(result), 200  # Return the fetched information as JSON
+        # If 'url' key is present, process it
+        result = process_the_url(data['url'])  # Replace with your processing function
+        return jsonify(result), 200
     else:
-        return jsonify({"error": "Invalid request, URL is missing."}), 400
+        # If 'url' key is not present, return an error response
+        return jsonify({"error": "Missing 'url' key in JSON payload"}), 400
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)  # Specify a different port if needed
