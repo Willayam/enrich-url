@@ -2,8 +2,50 @@ from flask import Flask, request, jsonify
 from urllib.parse import urlparse
 import whois
 from datetime import datetime
+import dns.resolver
 
 app = Flask(__name__)
+
+def get_mx_records(domain):
+    try:
+        mx_records = dns.resolver.resolve(domain, 'MX')
+        return [str(record.exchange) for record in mx_records]
+    except dns.resolver.NoAnswer:
+        return None
+
+def get_spf_record(domain):
+    try:
+        txt_records = dns.resolver.resolve(domain, 'TXT')
+        for record in txt_records:
+            if record.to_text().startswith('"v=spf1'):
+                return record.to_text()
+        return None
+    except dns.resolver.NoAnswer:
+        return None
+
+def get_dkim_record(domain, selector):
+    try:
+        dkim_record_name = '{}._domainkey.{}'.format(selector, domain)
+        dkim_records = dns.resolver.resolve(dkim_record_name, 'TXT')
+        return dkim_records[0].to_text()
+    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+        return None
+
+def get_dmarc_record(domain):
+    try:
+        dmarc_record_name = '_dmarc.' + domain
+        dmarc_records = dns.resolver.resolve(dmarc_record_name, 'TXT')
+        return dmarc_records[0].to_text()
+    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+        return None
+
+def get_bimi_record(domain):
+    try:
+        bimi_record_name = '_bimi.' + domain
+        bimi_records = dns.resolver.resolve(bimi_record_name, 'TXT')
+        return bimi_records[0].to_text()
+    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+        return None
 
 def fetch_domain_info(url):
     domain = urlparse(url).netloc or url  # Fallback to use url as domain if netloc is empty
@@ -17,6 +59,13 @@ def fetch_domain_info(url):
         if isinstance(expires_date, datetime):
             expires_date = expires_date.strftime('%Y-%m-%d %H:%M:%S')
 
+        # Fetch DNS records
+        mx_records = get_mx_records(domain)
+        spf_record = get_spf_record(domain)
+        dkim_record = get_dkim_record(domain, 'selector2')  # Replace with the actual selector if known
+        dmarc_record = get_dmarc_record(domain)
+        bimi_record = get_bimi_record(domain)
+
         result = {
             'URL': url,
             'Jurisdiction': domain_info.get('country'),
@@ -24,7 +73,12 @@ def fetch_domain_info(url):
             'Registrar': domain_info.get('registrar'),
             'Registrant': domain_info.get('org'),
             'Created': created_date,
-            'Expires': expires_date
+            'Expires': expires_date,
+            'MX_Records': mx_records,
+            'SPF_Record': spf_record,
+            'DKIM_Record': dkim_record,
+            'DMARC_Record': dmarc_record,
+            'BIMI_Record': bimi_record
         }
         return result
     except Exception as e:
