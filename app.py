@@ -6,8 +6,11 @@ import dns.resolver
 import requests
 import functools
 import logging
+import ssl
+import socket
 import threading
 import time
+import queue
 
 app = Flask(__name__)
 
@@ -29,7 +32,7 @@ def get_mx_records(domain):
         mx_records = dns.resolver.resolve(domain, 'MX')
         return [str(record.exchange) for record in mx_records]
     except dns.resolver.NoAnswer:
-        return None
+        return []
 
 @log_function_time
 def get_spf_record(domain):
@@ -43,9 +46,9 @@ def get_spf_record(domain):
         return None
 
 @log_function_time
-def get_dkim_record(domain, selector):
+def get_dkim_record(domain, selector='default'):
     try:
-        dkim_record_name = '{}._domainkey.{}'.format(selector, domain)
+        dkim_record_name = f'{selector}._domainkey.{domain}'
         dkim_records = dns.resolver.resolve(dkim_record_name, 'TXT')
         return dkim_records[0].to_text()
     except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
@@ -70,6 +73,31 @@ def get_bimi_record(domain):
         return None
 
 @log_function_time
+def get_ssl_certificate(domain):
+    try:
+        context = ssl.create_default_context()
+        with socket.create_connection((domain, 443)) as sock:
+            with context.wrap_socket(sock, server_hostname=domain) as ssock:
+                ssl_info = ssock.getpeercert()
+                exp_date = datetime.strptime(ssl_info['notAfter'], '%b %d %H:%M:%S %Y %Z')
+                issuer = ssl_info.get('issuer')
+                issuer_str = ', '.join([f"{i[0]}={i[1]}" for i in issuer]) if issuer else "N/A"
+                return {"domain": domain, "expiry_date": exp_date, "issuer": issuer_str}
+    except Exception as e:
+        return {"domain": domain, "error": str(e), "issuer": "Error fetching issuer"}
+
+@log_function_time
+def is_url_live(url):
+    try:
+        response = requests.get(url, timeout=3, allow_redirects=True)
+        live = 200 <= response.status_code < 400
+        status_code = response.status_code
+        redirect_url = response.url if response.url != url else None
+        return live, status_code, redirect_url
+    except requests.RequestException as e:
+        return False, str(e), None
+
+@log_function_time
 def fetch_subdomains(domain, retries=3, backoff_factor=1):
     url = f"https://crt.sh/?q=%.{domain}&output=json"
     for attempt in range(retries):
@@ -84,57 +112,58 @@ def fetch_subdomains(domain, retries=3, backoff_factor=1):
                 logging.info(f"Rate limit hit, retrying in {sleep_time} seconds for domain: {domain}")
                 time.sleep(sleep_time)
             else:
-                logging.error(f"Failed to fetch data for {domain}. Status code: {response.status_code}")
-        except Exception as e:
-            logging.error(f"Exception occurred while fetching subdomains for {domain}: {e}")
-    logging.error(f"Max retries exceeded for domain {domain}")
-    return []
+                return ["Error fetching subdomains: Status code " + str(response.status_code)]
+        except requests.RequestException as e:
+            return ["Error fetching subdomains: " + str(e)]
+    return ["Error fetching subdomains: Exceeded max retries"]
 
-def fetch_domain_info(task_queue, result_queue):
-    while True:
-        url = task_queue.get()  # Fetch a URL from the task queue
-        domain = urlparse(url).netloc or url 
-        try:
-            domain_info = whois.whois(domain)
+@log_function_time
+def get_whois_info(domain):
+    try:
+        whois_info = whois.whois(domain)
+        return whois_info
+    except whois.parser.PywhoisError as e:
+        return {"error": str(e)}
 
-            # Format dates for JSON serialization
-            created_date = domain_info.get('creation_date')
-            expires_date = domain_info.get('expiration_date')
-            if isinstance(created_date, datetime):
-                created_date = created_date.strftime('%Y-%m-%d %H:%M:%S')
-            if isinstance(expires_date, datetime):
-                expires_date = expires_date.strftime('%Y-%m-%d %H:%M:%S')
+@app.route('/domain-info', methods=['GET'])
+def domain_info():
+    domain = request.args.get('domain')
+    if domain:
+        parsed_url = urlparse(domain)
+        hostname = parsed_url.netloc or parsed_url.path  # Extract hostname if URL, else assume it's a domain
 
-            # Fetch DNS records (concurrently if desired)
-            mx_records = get_mx_records(domain)
-            spf_record = get_spf_record(domain)
-            dkim_record = get_dkim_record(domain, 'selector2')  
-            dmarc_record = get_dmarc_record(domain)
-            bimi_record = get_bimi_record(domain)
-            subdomains = fetch_subdomains(domain)
+        # Multithreading to fetch records simultaneously
+        queue_results = queue.Queue()
 
-            result = {
-                'URL': url,
-                'Jurisdiction': domain_info.get('country'),
-                'DNS': ', '.join(domain_info.get('name_servers', [])) if isinstance(domain_info.get('name_servers', []), list) else domain_info.get('name_servers'),
-                'Registrar': domain_info.get('registrar'),
-                'Registrant': domain_info.get('org'),
-                'Created': created_date,
-                'Expires': expires_date,
-                'MX_Records': mx_records,
-                'SPF_Record': spf_record,
-                'DKIM_Record': dkim_record,
-                'DMARC_Record': dmarc_record,
-                'BIMI_Record': bimi_record,
-                'Subdomains': subdomains
-            }
+        def worker(target, *args):
+            result = target(*args)
+            queue_results.put(result)
 
-            result_queue.put((url, result)) # Store URL with results
+        # Define tasks
+        tasks = [
+            (get_mx_records, hostname),
+            (get_spf_record, hostname),
+            (get_dkim_record, hostname),
+            (get_dmarc_record, hostname),
+            (get_bimi_record, hostname),
+            (get_ssl_certificate, hostname),
+            (is_url_live, f"http://{hostname}"),
+            (fetch_subdomains, hostname),
+            (get_whois_info, hostname)
+        ]
 
-        except Exception as e:
-            result_queue.put((url, {'Error': str(e)})) 
+        threads = [threading.Thread(target=worker, args=(task[0], *task[1:])) for task in tasks]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
 
-        task_queue.task_done() 
+        # Gather results
+        results = [queue_results.get() for _ in tasks]
+
+        return jsonify(results)
+    else:
+        return jsonify({"error": "No domain provided"}), 400
 
 @app.route('/webhook', methods=['POST'])
 def webhook_handler():
@@ -166,7 +195,6 @@ def webhook_handler():
         return jsonify({"error": "Missing 'url' key in JSON payload"}), 400
 
 if __name__ == '__main__':
-    # Set up specific logger for the application
     handler = logging.StreamHandler()
     handler.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
