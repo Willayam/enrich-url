@@ -6,6 +6,7 @@ import dns.resolver
 import requests
 import functools
 import logging
+import threading
 import time
 
 app = Flask(__name__)
@@ -89,45 +90,51 @@ def fetch_subdomains(domain, retries=3, backoff_factor=1):
     logging.error(f"Max retries exceeded for domain {domain}")
     return []
 
-@log_function_time
-def fetch_domain_info(url):
-    domain = urlparse(url).netloc or url  # Fallback to use url as domain if netloc is empty
-    try:
-        domain_info = whois.whois(domain)
-        # Format dates for JSON serialization
-        created_date = domain_info.get('creation_date')
-        expires_date = domain_info.get('expiration_date')
-        if isinstance(created_date, datetime):
-            created_date = created_date.strftime('%Y-%m-%d %H:%M:%S')
-        if isinstance(expires_date, datetime):
-            expires_date = expires_date.strftime('%Y-%m-%d %H:%M:%S')
+def fetch_domain_info(task_queue, result_queue):
+    while True:
+        url = task_queue.get()  # Fetch a URL from the task queue
+        domain = urlparse(url).netloc or url 
+        try:
+            domain_info = whois.whois(domain)
 
-        # Fetch DNS records
-        mx_records = get_mx_records(domain)
-        spf_record = get_spf_record(domain)
-        dkim_record = get_dkim_record(domain, 'selector2')  # Assume 'selector2' or replace as needed
-        dmarc_record = get_dmarc_record(domain)
-        bimi_record = get_bimi_record(domain)
-        subdomains = fetch_subdomains(domain)
+            # Format dates for JSON serialization
+            created_date = domain_info.get('creation_date')
+            expires_date = domain_info.get('expiration_date')
+            if isinstance(created_date, datetime):
+                created_date = created_date.strftime('%Y-%m-%d %H:%M:%S')
+            if isinstance(expires_date, datetime):
+                expires_date = expires_date.strftime('%Y-%m-%d %H:%M:%S')
 
-        result = {
-            'URL': url,
-            'Jurisdiction': domain_info.get('country'),
-            'DNS': ', '.join(domain_info.get('name_servers', [])) if isinstance(domain_info.get('name_servers', []), list) else domain_info.get('name_servers'),
-            'Registrar': domain_info.get('registrar'),
-            'Registrant': domain_info.get('org'),
-            'Created': created_date,
-            'Expires': expires_date,
-            'MX_Records': mx_records,
-            'SPF_Record': spf_record,
-            'DKIM_Record': dkim_record,
-            'DMARC_Record': dmarc_record,
-            'BIMI_Record': bimi_record,
-            'Subdomains': subdomains
-        }
-        return result
-    except Exception as e:
-        return {'URL': url, 'Error': str(e)}
+            # Fetch DNS records (concurrently if desired)
+            mx_records = get_mx_records(domain)
+            spf_record = get_spf_record(domain)
+            dkim_record = get_dkim_record(domain, 'selector2')  
+            dmarc_record = get_dmarc_record(domain)
+            bimi_record = get_bimi_record(domain)
+            subdomains = fetch_subdomains(domain)
+
+            result = {
+                'URL': url,
+                'Jurisdiction': domain_info.get('country'),
+                'DNS': ', '.join(domain_info.get('name_servers', [])) if isinstance(domain_info.get('name_servers', []), list) else domain_info.get('name_servers'),
+                'Registrar': domain_info.get('registrar'),
+                'Registrant': domain_info.get('org'),
+                'Created': created_date,
+                'Expires': expires_date,
+                'MX_Records': mx_records,
+                'SPF_Record': spf_record,
+                'DKIM_Record': dkim_record,
+                'DMARC_Record': dmarc_record,
+                'BIMI_Record': bimi_record,
+                'Subdomains': subdomains
+            }
+
+            result_queue.put((url, result)) # Store URL with results
+
+        except Exception as e:
+            result_queue.put((url, {'Error': str(e)})) 
+
+        task_queue.task_done() 
 
 @app.route('/webhook', methods=['POST'])
 def webhook_handler():
@@ -135,8 +142,25 @@ def webhook_handler():
     data = request.json
     if data and 'url' in data:
         logging.info(f"Processing URL: {data['url']}")
-        result = fetch_domain_info(data['url'])
-        return jsonify(result), 200
+        task_queue = queue.Queue()
+        result_queue = queue.Queue()
+
+        worker_threads = [threading.Thread(target=fetch_domain_info, args=(task_queue, result_queue)) for _ in range(4)]  # Adjust thread count as needed
+
+        # Start worker threads
+        for thread in worker_threads:
+            thread.daemon = True  # Ensure threads exit with the main process
+            thread.start()
+
+        task_queue.put(data['url'])
+        task_queue.join()      # Wait for the task to complete
+
+        # Get results from the queue
+        if not result_queue.empty():
+            url, result = result_queue.get()
+            return jsonify(result), 200
+        else:
+            return jsonify({"error": "Error processing URL"}), 500
     else:
         logging.error("Missing 'url' key in JSON payload")
         return jsonify({"error": "Missing 'url' key in JSON payload"}), 400
