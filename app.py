@@ -1,16 +1,14 @@
-from flask import Flask, request, jsonify
-from urllib.parse import urlparse
-import whois
-from datetime import datetime
 import dns.resolver
-import requests
 import functools
 import logging
+import time
+from flask import Flask, request, jsonify
+import concurrent.futures
+import whois
+import requests
+from datetime import datetime
 import ssl
 import socket
-import threading
-import time
-import queue
 
 app = Flask(__name__)
 
@@ -25,77 +23,116 @@ def log_function_time(func):
     return wrapper_log_function_time
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
 @log_function_time
-def get_mx_records(domain):
-    try:
-        mx_records = dns.resolver.resolve(domain, 'MX')
-        return [str(record.exchange) for record in mx_records]
-    except dns.resolver.NoAnswer:
-        return []
-
-@log_function_time
-def get_spf_record(domain):
-    try:
-        txt_records = dns.resolver.resolve(domain, 'TXT')
-        for record in txt_records:
-            if record.to_text().startswith('"v=spf1'):
-                return record.to_text()
+def format_date(date_field):
+    """Ensure dates are in ISO 8601 format."""
+    if not date_field:
         return None
-    except dns.resolver.NoAnswer:
-        return None
+    if isinstance(date_field, list):  # If the date field is a list, choose the first relevant date
+        date_field = date_field[0]
+    if isinstance(date_field, datetime):  # Format datetime objects to string
+        return date_field.isoformat()
+    return date_field  # In case the date is already a string or other format
 
 @log_function_time
-def get_dkim_record(domain, selector='default'):
-    try:
-        dkim_record_name = f'{selector}._domainkey.{domain}'
-        dkim_records = dns.resolver.resolve(dkim_record_name, 'TXT')
-        return dkim_records[0].to_text()
-    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+def format_list_as_string(list_field):
+    """Convert list fields to a comma-separated string, handling None values."""
+    if not list_field:
         return None
+    if isinstance(list_field, list):
+        return ', '.join([str(item) for item in list_field])
+    return str(list_field)
 
 @log_function_time
-def get_dmarc_record(domain):
+def fetch_whois_data(domain):
     try:
-        dmarc_record_name = '_dmarc.' + domain
-        dmarc_records = dns.resolver.resolve(dmarc_record_name, 'TXT')
-        return dmarc_records[0].to_text()
-    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
-        return None
-
-@log_function_time
-def get_bimi_record(domain):
-    try:
-        bimi_record_name = '_bimi.' + domain
-        bimi_records = dns.resolver.resolve(bimi_record_name, 'TXT')
-        return bimi_records[0].to_text()
-    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
-        return None
-
-@log_function_time
-def get_ssl_certificate(domain):
-    try:
-        context = ssl.create_default_context()
-        with socket.create_connection((domain, 443)) as sock:
-            with context.wrap_socket(sock, server_hostname=domain) as ssock:
-                ssl_info = ssock.getpeercert()
-                exp_date = datetime.strptime(ssl_info['notAfter'], '%b %d %H:%M:%S %Y %Z')
-                issuer = ssl_info.get('issuer')
-                issuer_str = ', '.join([f"{i[0]}={i[1]}" for i in issuer]) if issuer else "N/A"
-                return {"domain": domain, "expiry_date": exp_date, "issuer": issuer_str}
+        whois_info = whois.whois(domain)
+        domain_info = {
+            "Created": format_date(whois_info.get("creation_date")),
+            "Expires": format_date(whois_info.get("expiration_date")),
+            "Updated": format_date(whois_info.get("updated_date")),
+            "Registrar": whois_info.get("registrar"),
+            "Registrant": whois_info.get("name") if whois_info.get("name") else whois_info.get("org"),
+            "Jurisdiction": whois_info.get("country"),
+            "NS": format_list_as_string(whois_info.get("name_servers")),
+            "Email": format_list_as_string(whois_info.get("emails")),
+            "WHOISServer": whois_info.get("whois_server"),
+            "Status": format_list_as_string(whois_info.get("status"))
+        }
+        return domain_info
     except Exception as e:
-        return {"domain": domain, "error": str(e), "issuer": "Error fetching issuer"}
+        return {"error": str(e)}
 
 @log_function_time
-def is_url_live(url):
-    try:
-        response = requests.get(url, timeout=3, allow_redirects=True)
-        live = 200 <= response.status_code < 400
-        status_code = response.status_code
-        redirect_url = response.url if response.url != url else None
-        return live, status_code, redirect_url
-    except requests.RequestException as e:
-        return False, str(e), None
+def fetch_dns_records(domain):
+    def fetch_record(record_type):
+        try:
+            if record_type in ['MX', 'TXT', 'A', 'DNSKEY']:
+                records = dns.resolver.resolve(domain, record_type)
+                if record_type == 'A':
+                    return 'A', [str(record.address) for record in records]
+                elif record_type == 'DNSKEY':
+                    # If DNSKEY records are found, it's an indication that DNSSEC may be used
+                    return 'DNSSEC', "Enabled"
+                else:
+                    return record_type, [record.to_text() for record in records]
+            elif record_type == 'DMARC':
+                return 'DMARC', [record.to_text() for record in dns.resolver.resolve('_dmarc.' + domain, 'TXT')]
+            elif record_type == 'BIMI':
+                return 'BIMI', [record.to_text() for record in dns.resolver.resolve('_bimi.' + domain, 'TXT')]
+        except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.exception.Timeout):
+            return record_type, f"No {record_type} records found"
+        except dns.resolver.NoNameservers:
+            return 'DNSSEC', "No DNSSEC records found"
+
+    records = {}
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Include 'A' for A records and 'DNSKEY' to check for DNSSEC
+        future_to_record = {executor.submit(fetch_record, record_type): record_type for record_type in ['MX', 'TXT', 'A', 'DMARC', 'BIMI', 'DNSKEY']}
+        for future in concurrent.futures.as_completed(future_to_record):
+            record_type, result = future.result()
+            if record_type == 'TXT':
+                # Process TXT records to separate SPF and generic TXT records
+                spf_records = [r for r in result if r.startswith('"v=spf1')]
+                dkim_records = [r for r in result if r.startswith('v=DKIM1')]  # Example to capture DKIM records, might need adjustment based on actual selector
+                records["SPF"] = spf_records if spf_records else "No SPF record found"
+                records["DKIM"] = dkim_records if dkim_records else "No DKIM record found"
+                records[record_type] = result  # Keep all TXT records if needed
+            else:
+                records[record_type] = result
+
+    # If DNSKEY wasn't found, it indicates DNSSEC is not enabled
+    if 'DNSSEC' not in records:
+        records['DNSSEC'] = "Disabled"
+
+    return records
+
+@log_function_time
+def fetch_url_data(domain):
+    results = {
+        "IsAccessible": "PLACEHOLDER",
+        "HTTPStatusCode": "PLACEHOLDER",
+        "RedirectURL": "PLACEHOLDER",
+        "HTTP": "false",  # Assume false until proven true
+        "HTTPS": "false",  # Assume false until proven true
+    }
+
+    for protocol in ["http", "https"]:
+        url = f"{protocol}://{domain}"
+        try:
+            response = requests.get(url, timeout=5, allow_redirects=True)
+            live = 200 <= response.status_code < 400
+            if live:
+                results["IsAccessible"] = "true"
+                results["HTTPStatusCode"] = response.status_code
+                if response.url != url:
+                    results["RedirectURL"] = response.url
+                results["HTTP" if protocol == "http" else "HTTPS"] = "true"
+        except requests.RequestException as e:
+            # Log the error or store it if needed
+            continue
+
+    return results
 
 @log_function_time
 def fetch_subdomains(domain, retries=3, backoff_factor=1):
@@ -118,83 +155,136 @@ def fetch_subdomains(domain, retries=3, backoff_factor=1):
     return ["Error fetching subdomains: Exceeded max retries"]
 
 @log_function_time
-def get_whois_info(domain):
+def fetch_ssl_info_for_subdomains(executor, subdomains):
+    # Use the executor to submit a job for fetching SSL info for each subdomain
+    future_to_ssl_info = {executor.submit(fetch_ssl_info_for_subdomain, sub): sub for sub in subdomains}
+    ssl_info_results = []
+    for future in concurrent.futures.as_completed(future_to_ssl_info):
+        try:
+            ssl_info_results.append(future.result())
+        except Exception as exc:
+            subdomain = future_to_ssl_info[future]
+            logging.error(f"SSL info fetching for {subdomain} generated an exception: {exc}")
+            ssl_info_results.append({"SubdomainName": subdomain, "error": str(exc)})
+    return ssl_info_results
+
+
+@log_function_time
+def fetch_ssl_info_for_subdomain(subdomain):
     try:
-        whois_info = whois.whois(domain)
-        return whois_info
-    except whois.parser.PywhoisError as e:
-        return {"error": str(e)}
+        context = ssl.create_default_context()
+        # Connect to the subdomain over port 443 (SSL) with a timeout
+        with socket.create_connection((subdomain, 443), timeout=10) as sock:
+            with context.wrap_socket(sock, server_hostname=subdomain) as ssock:
+                cert = ssock.getpeercert()
 
+                # Extract the necessary information from the certificate
+                cert_common_name = cert.get("subjectAltName", [("DNS", "N/A")])[0][1]  # Use SAN for commonName if available
+                issuer = cert.get("issuer")
+                issuer_str = ', '.join([str(i[0][1]) for i in issuer]) if issuer else "N/A"
+
+                # Parse certificate validity dates
+                valid_from = datetime.strptime(cert['notBefore'], '%b %d %H:%M:%S %Y %Z').isoformat()
+                valid_until = datetime.strptime(cert['notAfter'], '%b %d %H:%M:%S %Y %Z').isoformat()
+
+                # Extract covered domains from the certificate's subjectAltName
+                covered_domains_list = [item[1] for item in cert.get("subjectAltName", []) if item[0] == "DNS"]
+
+                return {
+                    "SubdomainName": subdomain,
+                    "CertificateAuthorityName": issuer_str,
+                    "CertificateCommonName": cert_common_name,
+                    "CertificateCoveredDomains": ", ".join(covered_domains_list),
+                    "CertificateValidFrom": valid_from,
+                    "CertificateValidUntil": valid_until
+                }
+    except Exception as e:
+        return {
+            "SubdomainName": subdomain,
+            "error": str(e)
+        }
+def aggregate_data(domain, whois_data, dns_data, url_data, subdomains, ssl_info):
+    
+    # Format the WHOIS data according to the specified structure
+    final_data = {
+        "Domain": domain,
+        # "TLD": "PLACEHOLDER",
+        "Created": format_date(whois_data.get("Created")),
+        "Expires": format_date(whois_data.get("Expires")),
+        "Updated": format_date(whois_data.get("Updated")),
+        "Registrar": whois_data.get("Registrar", "Unknown"),
+        "Registrant": whois_data.get("Registrant", "Unknown"),
+        "Jurisdiction": whois_data.get("Jurisdiction", "Unknown"),
+        "Status": whois_data.get("Status", "Unknown"),
+        "Email": whois_data.get("Email", "No email found"),
+        "WHOISServer": whois_data.get("WHOISServer", "No WHOIS server found"),
+        "IsAccessible": url_data.get("IsAccessible"),
+        "HTTPStatusCode": url_data.get("HTTPStatusCode", "Not Found"),
+        "RedirectURL": url_data.get("RedirectURL", "No redirect"),
+        "HTTP": url_data.get("HTTP", "false"),
+        "HTTPS": url_data.get("HTTPS", "false"),
+        # "TLS": "PLACEHOLDER",
+        "DNSSEC": dns_data.get('DNSSEC', "Disabled"),
+        "NS": format_list_as_string(whois_data.get("NS")),
+        "Subdomains": [
+            {
+                "SubdomainName": ssl["SubdomainName"],
+                "CertificateAuthorityName": ssl.get("CertificateAuthorityName", "Unknown"),
+                "CertificateCommonName": ssl.get("CertificateCommonName", "Unknown"),
+                "CertificateCoveredDomains": ssl.get("CertificateCoveredDomains", "Unknown"),
+                "CertificateValidFrom": ssl.get("CertificateValidFrom", "Unknown"),
+                "CertificateValidUntil": ssl.get("CertificateValidUntil", "Unknown"),
+            } for ssl in ssl_info
+        ],
+        "MX": ", ".join(dns_data.get('MX', [])) if dns_data.get('MX') != "No MX records found" else "No MX records found",
+        # "SMTP": "PLACEHOLDER",
+        "SPF": ", ".join(dns_data.get('SPF', [])) if dns_data.get('SPF') != "No SPF record found" else "No SPF record found",
+        "DKIM": ", ".join(dns_data.get('DKIM', [])) if 'DKIM' in dns_data and isinstance(dns_data.get('DKIM'), list) else dns_data.get('DKIM', "No DKIM record found"),
+        "DMARC": ", ".join(dns_data.get('DMARC', [])) if dns_data.get('DMARC') != "No DMARC records found" else "No DMARC records found",
+        "BIMI": ", ".join(dns_data.get('BIMI', [])) if dns_data.get('BIMI') != "No BIMI records found" else "No BIMI records found",
+        "A": ", ".join(dns_data.get('A', [])) if dns_data.get('A') != "No A records found" else "No A records found",
+    }
+
+    return final_data
+
+
+@log_function_time
 @app.route('/domain-info', methods=['GET'])
-def domain_info():
+@log_function_time
+def handle_webhook():
     domain = request.args.get('domain')
-    if domain:
-        parsed_url = urlparse(domain)
-        hostname = parsed_url.netloc or parsed_url.path  # Extract hostname if URL, else assume it's a domain
+    if not domain:
+        return jsonify({"error": "Domain is required"}), 400
 
-        # Multithreading to fetch records simultaneously
-        queue_results = queue.Queue()
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Submit tasks for parallel execution
+        future_to_whois = executor.submit(fetch_whois_data, domain)
+        future_to_dns = executor.submit(fetch_dns_records, domain)
+        future_to_url = executor.submit(fetch_url_data, domain)
+        future_to_subdomains = executor.submit(fetch_subdomains, domain)
 
-        def worker(target, *args):
-            result = target(*args)
-            queue_results.put(result)
+        # Use as_completed to efficiently wait for tasks to finish
+        whois_data, dns_data, url_data, subdomains = None, None, None, None
+        for future in concurrent.futures.as_completed([future_to_whois, future_to_dns, future_to_url, future_to_subdomains]):
+            result = future.result()
+            if future == future_to_whois:
+                whois_data = result
+            elif future == future_to_dns:
+                dns_data = result
+            elif future == future_to_url:
+                url_data = result
+            elif future == future_to_subdomains:
+                subdomains = result
 
-        # Define tasks
-        tasks = [
-            (get_mx_records, hostname),
-            (get_spf_record, hostname),
-            (get_dkim_record, hostname),
-            (get_dmarc_record, hostname),
-            (get_bimi_record, hostname),
-            (get_ssl_certificate, hostname),
-            (is_url_live, f"http://{hostname}"),
-            (fetch_subdomains, hostname),
-            (get_whois_info, hostname)
-        ]
+        # Fetch SSL info for subdomains in parallel
+        ssl_info = fetch_ssl_info_for_subdomains(executor, subdomains)
 
-        threads = [threading.Thread(target=worker, args=(task[0], *task[1:])) for task in tasks]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
-
-        # Gather results
-        results = [queue_results.get() for _ in tasks]
-
-        return jsonify(results)
-    else:
-        return jsonify({"error": "No domain provided"}), 400
-
-@app.route('/webhook', methods=['POST'])
-def webhook_handler():
-    logging.info("Received webhook request")
-    data = request.json
-    if data and 'url' in data:
-        logging.info(f"Processing URL: {data['url']}")
-        task_queue = queue.Queue()
-        result_queue = queue.Queue()
-
-        worker_threads = [threading.Thread(target=fetch_domain_info, args=(task_queue, result_queue)) for _ in range(4)]  # Adjust thread count as needed
-
-        # Start worker threads
-        for thread in worker_threads:
-            thread.daemon = True  # Ensure threads exit with the main process
-            thread.start()
-
-        task_queue.put(data['url'])
-        task_queue.join()      # Wait for the task to complete
-
-        # Get results from the queue
-        if not result_queue.empty():
-            url, result = result_queue.get()
-            return jsonify(result), 200
-        else:
-            return jsonify({"error": "Error processing URL"}), 500
-    else:
-        logging.error("Missing 'url' key in JSON payload")
-        return jsonify({"error": "Missing 'url' key in JSON payload"}), 400
+    # Aggregate all fetched data
+    final_data = aggregate_data(domain, whois_data, dns_data, url_data, subdomains, ssl_info)
+    return jsonify(final_data)
 
 if __name__ == '__main__':
+    # app.run(debug=True)
     handler = logging.StreamHandler()
     handler.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
