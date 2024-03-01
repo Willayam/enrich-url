@@ -1,1 +1,317 @@
-["\"v=DMARC1; p=none; rua=mailto:4e0a0f8817174ac09de3a8e62246cba0@dmarc-reports.cloudflare.net,mailto:3olwygea@ag.eu.dmarcadvisor.com;\"",["bubbleroom-se.mail.protection.outlook.com."],{"domain":"bubbleroom.se","error":"tuple index out of range","issuer":"Error fetching issuer"},null,null,"\"v=spf1 mx ip4:81.201.223.0/24 ip4:184.107.113.0/24 ip4:194.132.117.189 include:veinteractive.biz ip4:212.116.76.140 include:spf.protection.outlook.com include:spf.mandrillapp.com include:email.freshdesk.com include:spf.ilnet.se ~all\"",{"creation_date":"Mon, 29 Aug 2005 00:00:00 GMT","dnssec":"unsigned delegation","domain_name":"bubbleroom.se","expiration_date":"Mon, 20 May 2024 00:00:00 GMT","name_servers":["rita.ns.cloudflare.com 173.245.58.140","brad.ns.cloudflare.com 199.27.135.11"],"registrant_name":"APCSYS5441-56151","registrar":"Dotkeeper AB","status":"ok","transfer_date":"Tue, 03 Sep 2019 00:00:00 GMT","updated_date":"Thu, 20 Apr 2023 00:00:00 GMT"},["cookies.bubbleroom.se","autodiscover.bubbleroom.se","images.bubbleroom.se","bubbleroom.se\nwww.bubbleroom.se","acceptance.bubbleroom.se","www.bubbleroom.se","*.bubbleroom.se","*.bubbleroom.se\nbubbleroom.se","quicktest.bubbleroom.se","pvoheg.bubbleroom.se","pin.bubbleroom.se"],[true,200,"https://www.bubbleroom.se/"]]
+[
+    "\"v=DMARC1; p=none; rua=mailto:4e0a0f8817174ac09de3a8e62246cba0@dmarc-reports.cloudflare.net,mailto:3olwygea@ag.eu.dmarcadvisor.com;\"",
+    [
+        "bubbleroom-se.mail.protection.outlook.com."
+    ],
+    {
+        "domain": "bubbleroom.se",
+        "error": "tuple index out of range",
+        "issuer": "Error fetching issuer"
+    },
+    null,
+    null,
+    "\"v=spf1 mx ip4:81.201.223.0/24 ip4:184.107.113.0/24 ip4:194.132.117.189 include:veinteractive.biz ip4:212.116.76.140 include:spf.protection.outlook.com include:spf.mandrillapp.com include:email.freshdesk.com include:spf.ilnet.se ~all\"",
+    {
+        "creation_date": "Mon, 29 Aug 2005 00:00:00 GMT",
+        "dnssec": "unsigned delegation",
+        "domain_name": "bubbleroom.se",
+        "expiration_date": "Mon, 20 May 2024 00:00:00 GMT",
+        "name_servers": [
+            "rita.ns.cloudflare.com 173.245.58.140",
+            "brad.ns.cloudflare.com 199.27.135.11"
+        ],
+        "registrant_name": "APCSYS5441-56151",
+        "registrar": "Dotkeeper AB",
+        "status": "ok",
+        "transfer_date": "Tue, 03 Sep 2019 00:00:00 GMT",
+        "updated_date": "Thu, 20 Apr 2023 00:00:00 GMT"
+    },
+    [
+        "cookies.bubbleroom.se",
+        "autodiscover.bubbleroom.se",
+        "images.bubbleroom.se",
+        "bubbleroom.se\nwww.bubbleroom.se",
+        "acceptance.bubbleroom.se",
+        "www.bubbleroom.se",
+        "*.bubbleroom.se",
+        "*.bubbleroom.se\nbubbleroom.se",
+        "quicktest.bubbleroom.se",
+        "pvoheg.bubbleroom.se",
+        "pin.bubbleroom.se"
+    ],
+    [
+        true,
+        200,
+        "https://www.bubbleroom.se/"
+    ]
+
+
+
+    {
+        "DomainName": "Domain's full name.", ✅
+        "TLD": "Top-level domain (e.g., '.com').",
+        "Registered": "Indicates if the domain is currently registered (true/false).",
+        "Created": "Domain creation date (ISO 8601).",
+        "Expires": "Domain expiration date (ISO 8601).",
+        "Updated": "Last domain update date (ISO 8601).",
+        // transfered 
+        "Registrar": "Entity that registered the domain.",
+        "Registrant": "Name of the domain's owner.",
+        "Jurisdiction": "Legal jurisdiction of the domain (optional).",
+        "DomainStatus": "Current operational status of the domain.",
+        "IsAccessible": "If the domain is accessible (true/false).",
+        "HTTPStatusCode": "HTTP response status code for the domain.",
+        "RedirectURL": "URL to which the domain redirects, if any.",
+        "HTTP": "Indicates HTTP support (true/false).",
+        "HTTPS": "Indicates HTTPS support (true/false).",
+        "TLS": "TLS support status (optional, true/false).",
+        "DNSSEC": "DNSSEC status ('Enabled' or 'Disabled').",
+        "NS": "Comma-separated list of name servers.",
+        "Subdomains": [
+            {
+                "SubdomainName": "Subdomain's full name.",
+                "CertificateAuthorityName": "Certificate authority for the subdomain.",
+                "CertificateCommonName": "Common name on the subdomain's certificate.",
+                "CertificateCoveredDomains": "Domains covered by the subdomain's certificate.",
+                "CertificateValidFrom": "Start date of certificate validity (ISO 8601).",
+                "CertificateValidUntil": "End date of certificate validity (ISO 8601)."
+            }
+        ],
+        "MX": "Comma-separated list of mail exchange (MX) records.",
+        "SMTP": "SMTP server address (optional).",
+        "SPF": "Sender Policy Framework record (optional).",
+        "DKIM": "DomainKeys Identified Mail record (optional).",
+        "DMARC": "Domain-based Message Authentication, Reporting, and Conformance record (optional).",
+        "BIMI": "Brand Indicators for Message Identification record URL (optional).",
+        "A": "Comma-separated list of A records (IP addresses)."
+    }
+      
+    {
+        "A": "None",
+        "BIMI": "None",
+        "Created": "2013-09-11T06:14:43",
+        "DKIM": "None",
+        "DMARC": "None",
+        "DNSSEC": "Disabled",
+        "DomainName": "Unknown",
+        "DomainStatus": "clientTransferProhibited https://icann.org/epp#clientTransferProhibited, serverDeleteProhibited https://icann.org/epp#serverDeleteProhibited, serverTransferProhibited https://icann.org/epp#serverTransferProhibited, serverUpdateProhibited https://icann.org/epp#serverUpdateProhibited",
+        "Expires": "2024-09-11T06:14:43",
+        "HTTP": "true",
+        "HTTPS": "true",
+        "HTTPStatusCode": "200",
+        "IsAccessible": "false",
+        "Jurisdiction": "SE",
+        "MX": "None",
+        "NS": "DNS1.P01.NSONE.NET, DNS2.P02.NSONE.NET, DNS3.P01.NSONE.NET, DNS4.P01.NSONE.NET",
+        "RedirectURL": "None",
+        "Registered": "true",
+        "Registrant": "Protected Protected",
+        "Registrar": "Name SRS AB",
+        "SMTP": "None",
+        "SPF": "None",
+        "Subdomains": [
+            {
+                "SSLInfo": {
+                    "ssl_info": "mock SSL info",
+                    "subdomain": "dotkeeper.com\nwww.dotkeeper.com"
+                },
+                "SubdomainName": "*.dotkeeper.com\ndotkeeper.com"
+            },
+            {
+                "SSLInfo": {
+                    "ssl_info": "mock SSL info",
+                    "subdomain": "docs.dotkeeper.com"
+                },
+                "SubdomainName": "dotkeeper.com"
+            },
+            {
+                "SSLInfo": {
+                    "ssl_info": "mock SSL info",
+                    "subdomain": "dotkeeper.com"
+                },
+                "SubdomainName": "dotkeeper.com\nwww.dotkeeper.com"
+            },
+            {
+                "SSLInfo": {
+                    "ssl_info": "mock SSL info",
+                    "subdomain": "*.dotkeeper.com\ndotkeeper.com"
+                },
+                "SubdomainName": "docs.dotkeeper.com"
+            }
+        ],
+        "TLD": "Unknown",
+        "TLS": "optional",
+        "Updated": "2023-09-25T08:16:50"
+    }
+
+        {
+        "A": "PLACEHOLDER",
+        "DKIM": "PLACEHOLDER",
+        "DNSSEC": "PLACEHOLDER",
+        "SMTP": "PLACEHOLDER",
+        "Subdomains": [
+            {
+                "SSLInfo": {
+                    "ssl_info": "mock SSL info",
+                    "subdomain": "docs.dotkeeper.com"
+                },
+                "SubdomainName": "docs.dotkeeper.com"
+            },
+            {
+                "SSLInfo": {
+                    "ssl_info": "mock SSL info",
+                    "subdomain": "dotkeeper.com\nwww.dotkeeper.com"
+                },
+                "SubdomainName": "dotkeeper.com\nwww.dotkeeper.com"
+            },
+            {
+                "SSLInfo": {
+                    "ssl_info": "mock SSL info",
+                    "subdomain": "dotkeeper.com"
+                },
+                "SubdomainName": "dotkeeper.com"
+            },
+            {
+                "SSLInfo": {
+                    "ssl_info": "mock SSL info",
+                    "subdomain": "*.dotkeeper.com\ndotkeeper.com"
+                },
+                "SubdomainName": "*.dotkeeper.com\ndotkeeper.com"
+            }
+        ],
+        "TLD": "PLACEHOLDER",
+        "TLS": "PLACEHOLDER",
+        {
+            {
+                "A": "PLACEHOLDER",
+                "BIMI": "No BIMI records found",
+                "Created": "2013-09-11T06:14:43",
+                "DKIM": "PLACEHOLDER",
+                "DMARC": "\"v=DMARC1; p=quarantine; sp=reject; rua=mailto:e6tztg8r@ag.eu.dmarcadvisor.com;\"",
+                "DNSSEC": "PLACEHOLDER",
+                "Domain": "dotkeeper.com",
+                "Email": "abuse@namesrs.com, dotkeeper.com@shieldwhois.com",
+                "Expires": "2024-09-11T06:14:43",
+                "HTTP": "true",
+                "HTTPS": "true",
+                "HTTPStatusCode": 200,
+                "IsAccessible": "true",
+                "Jurisdiction": "SE",
+                "MX": "dotkeeper-com.mail.protection.outlook.com.",
+                "NS": "DNS1.P01.NSONE.NET, DNS2.P02.NSONE.NET, DNS3.P01.NSONE.NET, DNS4.P01.NSONE.NET",
+                "RedirectURL": "https://dotkeeper.com/",
+                "Registrant": "Protected Protected",
+                "Registrar": "Name SRS AB",
+                "SMTP": "PLACEHOLDER",
+                "SPF": "\"v=spf1 include:spf.protection.outlook.com include:_spf.anpdm.com include:sendgrid.net include:_spf.mailgun.org include:_spf.eu.mailgun.org include:_spf.questback.net ip4:46.246.30.217 ip4:192.36.81.0/24 -all\"",
+                "Status": "clientTransferProhibited https://icann.org/epp#clientTransferProhibited, serverDeleteProhibited https://icann.org/epp#serverDeleteProhibited, serverTransferProhibited https://icann.org/epp#serverTransferProhibited, serverUpdateProhibited https://icann.org/epp#serverUpdateProhibited",
+                "Subdomains": [
+                    {
+                        "CertificateAuthorityName": "Unknown",
+                        "CertificateCommonName": "Unknown",
+                        "CertificateCoveredDomains": "Unknown",
+                        "CertificateValidFrom": "Unknown",
+                        "CertificateValidUntil": "Unknown",
+                        "SubdomainName": "*.dotkeeper.com\ndotkeeper.com"
+                    },
+                    {
+                        "CertificateAuthorityName": "Unknown",
+                        "CertificateCommonName": "Unknown",
+                        "CertificateCoveredDomains": "Unknown",
+                        "CertificateValidFrom": "Unknown",
+                        "CertificateValidUntil": "Unknown",
+                        "SubdomainName": "dotkeeper.com\nwww.dotkeeper.com"
+                    },
+                    {
+                        "CertificateAuthorityName": "Unknown",
+                        "CertificateCommonName": "Unknown",
+                        "CertificateCoveredDomains": "Unknown",
+                        "CertificateValidFrom": "Unknown",
+                        "CertificateValidUntil": "Unknown",
+                        "SubdomainName": "docs.dotkeeper.com"
+                    },
+                    {
+                        "CertificateAuthorityName": "GB, Greater Manchester, Salford, Sectigo Limited, Sectigo RSA Organization Validation Secure Server CA",
+                        "CertificateCommonName": "*.dotkeeper.com",
+                        "CertificateCoveredDomains": "*.dotkeeper.com, dotkeeper.com",
+                        "CertificateValidFrom": "2023-11-13T00:00:00",
+                        "CertificateValidUntil": "2024-11-12T23:59:59",
+                        "SubdomainName": "dotkeeper.com"
+                    }
+                ],
+                "TLD": "PLACEHOLDER",
+                "TLS": "PLACEHOLDER",
+                "Updated": "2023-09-25T08:16:50",
+                "WHOISServer": "whois.namesrs.com"
+            }
+
+            {
+                "A": "35.71.142.77, 52.223.52.2",
+                "BIMI": "No BIMI records found",
+                "Created": null,
+                "DKIM": "N, o,  , D, K, I, M,  , r, e, c, o, r, d,  , f, o, u, n, d",
+                "DMARC": "No DMARC records found",
+                "DNSSEC": "Disabled",
+                "Domain": "sparv.ai",
+                "Email": null,
+                "Expires": null,
+                "HTTP": "true",
+                "HTTPS": "true",
+                "HTTPStatusCode": 200,
+                "IsAccessible": "true",
+                "Jurisdiction": "IS",
+                "MX": "5 alt1.aspmx.l.google.com., 5 alt2.aspmx.l.google.com., 1 aspmx.l.google.com., 10 aspmx2.googlemail.com., 10 aspmx3.googlemail.com.",
+                "NS": null,
+                "RedirectURL": "https://sparv.ai/",
+                "Registrant": null,
+                "Registrar": null,
+                "SMTP": "PLACEHOLDER",
+                "SPF": "No SPF record found",
+                "Status": null,
+                "Subdomains": [
+                    {
+                        "CertificateAuthorityName": "US, Let's Encrypt, R3",
+                        "CertificateCommonName": "sparv.ai",
+                        "CertificateCoveredDomains": "sparv.ai",
+                        "CertificateValidFrom": "2024-01-02T12:21:15",
+                        "CertificateValidUntil": "2024-04-01T12:21:14",
+                        "SubdomainName": "sparv.ai"
+                    },
+                    {
+                        "CertificateAuthorityName": "US, Let's Encrypt, R3",
+                        "CertificateCommonName": "www.sparv.ai",
+                        "CertificateCoveredDomains": "www.sparv.ai",
+                        "CertificateValidFrom": "2024-01-02T22:44:54",
+                        "CertificateValidUntil": "2024-04-01T22:44:53",
+                        "SubdomainName": "www.sparv.ai"
+                    },
+                    {
+                        "CertificateAuthorityName": "US, Let's Encrypt, R3",
+                        "CertificateCommonName": "staging.sparv.ai",
+                        "CertificateCoveredDomains": "staging.sparv.ai",
+                        "CertificateValidFrom": "2024-01-07T10:45:09",
+                        "CertificateValidUntil": "2024-04-06T10:45:08",
+                        "SubdomainName": "staging.sparv.ai"
+                    },
+                    {
+                        "CertificateAuthorityName": "US, Let's Encrypt, R3",
+                        "CertificateCommonName": "app.sparv.ai",
+                        "CertificateCoveredDomains": "app.sparv.ai",
+                        "CertificateValidFrom": "2024-01-07T10:25:10",
+                        "CertificateValidUntil": "2024-04-06T10:25:09",
+                        "SubdomainName": "app.sparv.ai"
+                    },
+                    {
+                        "CertificateAuthorityName": "US, Let's Encrypt, R3",
+                        "CertificateCommonName": "experimental.sparv.ai",
+                        "CertificateCoveredDomains": "experimental.sparv.ai",
+                        "CertificateValidFrom": "2024-01-07T10:25:14",
+                        "CertificateValidUntil": "2024-04-06T10:25:13",
+                        "SubdomainName": "experimental.sparv.ai"
+                    }
+                ],
+                "TLD": "PLACEHOLDER",
+                "TLS": "PLACEHOLDER",
+                "Updated": null,
+                "WHOISServer": null
+            }

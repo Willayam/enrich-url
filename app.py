@@ -23,7 +23,6 @@ def log_function_time(func):
     return wrapper_log_function_time
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-@log_function_time
 def format_date(date_field):
     """Ensure dates are in ISO 8601 format."""
     if not date_field:
@@ -34,14 +33,12 @@ def format_date(date_field):
         return date_field.isoformat()
     return date_field  # In case the date is already a string or other format
 
-@log_function_time
 def format_list_as_string(list_field):
-    """Convert list fields to a comma-separated string, handling None values."""
     if not list_field:
         return None
     if isinstance(list_field, list):
-        return ', '.join([str(item) for item in list_field])
-    return str(list_field)
+        return ','.join([str(item).lower() for item in list_field])
+    return str(list_field).lower()
 
 @log_function_time
 def fetch_whois_data(domain):
@@ -109,29 +106,39 @@ def fetch_dns_records(domain):
 
 @log_function_time
 def fetch_url_data(domain):
+    # Initialize results with more meaningful default values
     results = {
-        "IsAccessible": "PLACEHOLDER",
-        "HTTPStatusCode": "PLACEHOLDER",
-        "RedirectURL": "PLACEHOLDER",
-        "HTTP": "false",  # Assume false until proven true
-        "HTTPS": "false",  # Assume false until proven true
+        "IsAccessible": "false",
+        "HTTPStatusCode": None,
+        "RedirectURL": None,
+        "HTTP": "false",
+        "HTTPS": "false",
     }
+    
+    # Initialize an empty set to track protocols over which the domain is accessible
+    accessible_protocols = set()
 
     for protocol in ["http", "https"]:
         url = f"{protocol}://{domain}"
         try:
             response = requests.get(url, timeout=5, allow_redirects=True)
-            live = 200 <= response.status_code < 400
-            if live:
+            # Check if the response status code indicates success
+            if 200 <= response.status_code < 400:
                 results["IsAccessible"] = "true"
                 results["HTTPStatusCode"] = response.status_code
-                if response.url != url:
+                accessible_protocols.add(protocol)
+                if response.history:  # If there are any redirects
+                    # Note: You might want to handle the case where there are multiple redirects differently
                     results["RedirectURL"] = response.url
-                results["HTTP" if protocol == "http" else "HTTPS"] = "true"
+            else:
+                logging.info(f"Non-successful status code {response.status_code} for {url}")
         except requests.RequestException as e:
-            # Log the error or store it if needed
-            continue
+            logging.error(f"RequestException for {url}: {e}")
 
+    # Update protocol-specific accessibility based on successful connections
+    for protocol in ["http", "https"]:
+        results[protocol.upper()] = "true" if protocol in accessible_protocols else "false"
+    
     return results
 
 @log_function_time
@@ -180,8 +187,9 @@ def fetch_ssl_info_for_subdomain(subdomain):
 
                 # Extract the necessary information from the certificate
                 cert_common_name = cert.get("subjectAltName", [("DNS", "N/A")])[0][1]  # Use SAN for commonName if available
-                issuer = cert.get("issuer")
-                issuer_str = ', '.join([str(i[0][1]) for i in issuer]) if issuer else "N/A"
+                
+                # Extract issuer information and specifically look for the 'organizationName' (O) entry
+                issuer = next((item[0][1] for item in cert.get('issuer') if item[0][0] == 'organizationName'), "N/A")
 
                 # Parse certificate validity dates
                 valid_from = datetime.strptime(cert['notBefore'], '%b %d %H:%M:%S %Y %Z').isoformat()
@@ -192,7 +200,7 @@ def fetch_ssl_info_for_subdomain(subdomain):
 
                 return {
                     "SubdomainName": subdomain,
-                    "CertificateAuthorityName": issuer_str,
+                    "CertificateAuthorityName": issuer,
                     "CertificateCommonName": cert_common_name,
                     "CertificateCoveredDomains": ", ".join(covered_domains_list),
                     "CertificateValidFrom": valid_from,
@@ -203,50 +211,45 @@ def fetch_ssl_info_for_subdomain(subdomain):
             "SubdomainName": subdomain,
             "error": str(e)
         }
-def aggregate_data(domain, whois_data, dns_data, url_data, subdomains, ssl_info):
     
-    # Format the WHOIS data according to the specified structure
+def aggregate_data(domain, whois_data, dns_data, url_data, subdomains, ssl_info):
     final_data = {
         "Domain": domain,
+        "Created": whois_data.get("Created", None),
+        "Expires": whois_data.get("Expires", None),
+        "Updated": whois_data.get("Updated", None),
         # "TLD": "PLACEHOLDER",
-        "Created": format_date(whois_data.get("Created")),
-        "Expires": format_date(whois_data.get("Expires")),
-        "Updated": format_date(whois_data.get("Updated")),
-        "Registrar": whois_data.get("Registrar", "Unknown"),
-        "Registrant": whois_data.get("Registrant", "Unknown"),
-        "Jurisdiction": whois_data.get("Jurisdiction", "Unknown"),
-        "Status": whois_data.get("Status", "Unknown"),
-        "Email": whois_data.get("Email", "No email found"),
-        "WHOISServer": whois_data.get("WHOISServer", "No WHOIS server found"),
-        "IsAccessible": url_data.get("IsAccessible"),
-        "HTTPStatusCode": url_data.get("HTTPStatusCode", "Not Found"),
-        "RedirectURL": url_data.get("RedirectURL", "No redirect"),
+        "Registrar": whois_data.get("Registrar", None),
+        "Registrant": whois_data.get("Registrant", None),
+        "Jurisdiction": whois_data.get("Jurisdiction", None),
+        "Status": whois_data.get("Status", None),
+        "Email": whois_data.get("Email", None),
+        "WHOISServer": whois_data.get("WHOISServer", None),
+        "IsAccessible": url_data.get("IsAccessible", None),
+        "HTTPStatusCode": url_data.get("HTTPStatusCode", None),
+        "RedirectURL": url_data.get("RedirectURL", None),
         "HTTP": url_data.get("HTTP", "false"),
         "HTTPS": url_data.get("HTTPS", "false"),
         # "TLS": "PLACEHOLDER",
         "DNSSEC": dns_data.get('DNSSEC', "Disabled"),
-        "NS": format_list_as_string(whois_data.get("NS")),
-        "Subdomains": [
-            {
-                "SubdomainName": ssl["SubdomainName"],
-                "CertificateAuthorityName": ssl.get("CertificateAuthorityName", "Unknown"),
-                "CertificateCommonName": ssl.get("CertificateCommonName", "Unknown"),
-                "CertificateCoveredDomains": ssl.get("CertificateCoveredDomains", "Unknown"),
-                "CertificateValidFrom": ssl.get("CertificateValidFrom", "Unknown"),
-                "CertificateValidUntil": ssl.get("CertificateValidUntil", "Unknown"),
-            } for ssl in ssl_info
-        ],
-        "MX": ", ".join(dns_data.get('MX', [])) if dns_data.get('MX') != "No MX records found" else "No MX records found",
-        # "SMTP": "PLACEHOLDER",
-        "SPF": ", ".join(dns_data.get('SPF', [])) if dns_data.get('SPF') != "No SPF record found" else "No SPF record found",
-        "DKIM": ", ".join(dns_data.get('DKIM', [])) if 'DKIM' in dns_data and isinstance(dns_data.get('DKIM'), list) else dns_data.get('DKIM', "No DKIM record found"),
-        "DMARC": ", ".join(dns_data.get('DMARC', [])) if dns_data.get('DMARC') != "No DMARC records found" else "No DMARC records found",
-        "BIMI": ", ".join(dns_data.get('BIMI', [])) if dns_data.get('BIMI') != "No BIMI records found" else "No BIMI records found",
-        "A": ", ".join(dns_data.get('A', [])) if dns_data.get('A') != "No A records found" else "No A records found",
+        "NS": whois_data.get("NS", None),
+        "Subdomains": [{
+            "SubdomainName": ssl.get("SubdomainName", None),
+            "CertificateAuthorityName": ssl.get("CertificateAuthorityName", None),
+            "CertificateCommonName": ssl.get("CertificateCommonName", None),
+            "CertificateCoveredDomains": ssl.get("CertificateCoveredDomains", None),
+            "CertificateValidFrom": ssl.get("CertificateValidFrom", None),
+            "CertificateValidUntil": ssl.get("CertificateValidUntil", None),
+        } for ssl in ssl_info],
+        "MX": ", ".join(dns_data.get('MX', [])) if dns_data.get('MX') and dns_data.get('MX') != "No MX records found" else None,
+        "SPF": ", ".join(dns_data.get('SPF', [])) if dns_data.get('SPF') and dns_data.get('SPF') != "No SPF record found" else None,
+        "DKIM": ", ".join(dns_data.get('DKIM', [])) if 'DKIM' in dns_data and dns_data.get('DKIM') and dns_data.get('DKIM') != "No DKIM record found" else None,
+        "DMARC": ", ".join(dns_data.get('DMARC', [])) if dns_data.get('DMARC') and dns_data.get('DMARC') != "No DMARC records found" else None,
+        "BIMI": ", ".join(dns_data.get('BIMI', [])) if dns_data.get('BIMI') and dns_data.get('BIMI') != "No BIMI records found" else None,
+        "A": ", ".join(dns_data.get('A', [])) if dns_data.get('A') and dns_data.get('A') != "No A records found" else None,
     }
 
     return final_data
-
 
 @log_function_time
 @app.route('/domain-info', methods=['GET'])
